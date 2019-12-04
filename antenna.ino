@@ -16,6 +16,10 @@
 #include "GyverButton.h"
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_ADXL345_U.h>
+#include <Adafruit_9DOF.h>
 
 Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
 
@@ -23,6 +27,9 @@ TinyGPSPlus gps;
 TinyGPSCustom mdecl(gps, "GPRMC", 11);
 TinyGPSCustom mdeclDir(gps, "GPRMC", 12);
 SoftwareSerial ss(RXPin, TXPin);
+
+Adafruit_9DOF dof   = Adafruit_9DOF();
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
 GButton upB(upButton, LOW_PULL, NORM_OPEN);
 GButton downB(downButton, LOW_PULL, NORM_OPEN);
@@ -45,6 +52,35 @@ void change_st()
   st = !st;
 }
 
+void getOrientation(){
+  sensors_event_t accel_event;
+  sensors_vec_t   orientation;
+
+  accel.getEvent(&accel_event);
+  if (dof.accelGetOrientation(&accel_event, &orientation))
+  {
+    roll = orientation.roll;
+    pitch = orientation.pitch;
+  }
+}
+
+float getMagneticDeclination(){
+  float  mdeclDirFloat = 0;
+  if (mdecl.isUpdated() || mdeclDir.isUpdated())
+  {
+    String mDeclTemp = mdecl.value();
+    mdeclDirFloat = mDeclTemp.toFloat();
+    String magDeclDirTemp = mdeclDir.value();
+    if(magDeclDirTemp == "W") mdeclDirFloat = -mdeclDirFloat;
+  }
+  return mdeclDirFloat;
+}
+
+void updateGPS(){
+    while (ss.available() > 0)
+        gps.encode(ss.read());
+}
+
 void setup()
 {
   pinMode(LED, OUTPUT);
@@ -58,13 +94,9 @@ void setup()
 
 void loop() 
 {
-  if (mdecl.isUpdated() || mdeclDir.isUpdated())
-  {
-    String magDeclTemp = mdecl.value();
-    declinationAngle = magDeclTemp.toFloat();
-  }
-  while (ss.available() > 0)
-    gps.encode(ss.read());
+  getOrientation();
+  declinationAngle = getMagneticDeclination();
+  updateGPS();  
   if (st)
   {
     digitalWrite(LED, HIGH);
